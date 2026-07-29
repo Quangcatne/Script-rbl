@@ -1,118 +1,72 @@
--- [[ NOOB MAYHEM - DYNAMIC ITEM SCANNER BY QCAT ]]
--- Auto-scans inventory tools and dynamically injects them into the Orion Dropdown
-
--- Cú pháp chuẩn hóa để nạp thư viện Orion UI
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
+local Kavo = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua
+        "))()
+local Window = Kavo.CreateLib("Qcat Hub", "Midnight")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
--- Khởi tạo giao diện Qcat Hub
-local Window = OrionLib:MakeWindow({
-    Name = "Qcat Hub | Noob Mayhem [DYNAMIC SCAN]", 
-    HidePremium = true, 
-    SaveConfig = true, 
-    ConfigFolder = "QcatHub_DynamicScan",
-    IntroText = "Qcat Dynamic Engine..."
-})
-
--- Quản lý trạng thái toàn cục
 _G.KillAura = false
 _G.AuraRange = 20
-_G.NoCooldownActive = false
-_G.SelectedTargetWeapon = "Tất cả vật phẩm" -- Mặc định là bẻ khóa toàn bộ
+_G.NoCooldown = false
+_G.SelectedTargetWeapon = "Tất cả"
+_G.GodMode = false
+_G.AntiLag = false
+_G.WalkSpeed = 16
+_G.JumpPower = 50
+_G.FlySpeed = 50
+_G.Flying = false
 
--- Danh sách lưu trữ tên vũ khí quét được thực tế trong game
-local ScannedWeaponsList = {"Tất cả vật phẩm"}
+local ScannedWeaponsList = {"Tất cả"}
 
--- Hàm tiện ích quét tìm quái gần nhất (Dùng cho Kill Aura)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
 local function getClosestEnemy()
-    local closest = nil
-    local shortestDistance = math.huge
+    local closest, shortestDistance = nil, math.huge
     local container = workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Mobs") or workspace
     for _, obj in ipairs(container:GetChildren()) do
         if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
-            if obj.Name ~= LocalPlayer.Name and obj.Humanoid.Health > 0 then
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local dist = (LocalPlayer.Character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
-                    if dist < shortestDistance then
-                        closest = obj
-                        shortestDistance = dist
-                    end
-                end
+            if obj.Name ~= LocalPlayer.Name and obj.Humanoid.Health > 0 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
+                if dist < shortestDistance then closest, shortestDistance = obj, dist end
             end
         end
     end
     return closest
 end
 
--- Hàm quét động túi đồ để tìm tất cả các Object là "Tool" (Vũ khí/Item)
 local function updateInventoryList()
-    -- Đặt lại danh sách về mặc định ban đầu
-    ScannedWeaponsList = {"Tất cả vật phẩm"}
-    local checkTable = {} -- Tránh trùng lặp tên hiển thị trên UI
-
-    -- 1. Quét các Tool đang cầm trên tay
+    ScannedWeaponsList = {"Tất cả"}
+    local checkTable = {}
     if LocalPlayer.Character then
         for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
-            if item:IsA("Tool") and not checkTable[item.Name] then
-                table.insert(ScannedWeaponsList, item.Name)
-                checkTable[item.Name] = true
-            end
+            if item:IsA("Tool") and not checkTable[item.Name] then table.insert(ScannedWeaponsList, item.Name) checkTable[item.Name] = true end
         end
     end
-
-    -- 2. Quét các Tool đang cất trong túi đồ (Backpack)
     for _, item in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if item:IsA("Tool") and not checkTable[item.Name] then
-            table.insert(ScannedWeaponsList, item.Name)
-            checkTable[item.Name] = true
-        end
+        if item:IsA("Tool") and not checkTable[item.Name] then table.insert(ScannedWeaponsList, item.Name) checkTable[item.Name] = true end
     end
 end
 
--- ==========================================
--- TAB 1: COMBAT & AURA
--- ==========================================
-local CombatTab = Window:MakeTab({
-    Name = "Combat & Aura",
-    Icon = "rbxassetid://4483345998"
-})
-
-CombatTab:AddToggle({
-    Name = "Enable Kill Aura",
-    Default = false,
-    Callback = function(Value)
-        _G.KillAura = Value
-    end    
-})
-
-CombatTab:AddSlider({
-    Name = "Aura Range (Tầm đánh)",
-    Min = 5,
-    Max = 100,
-    Default = 20,
-    Color = Color3.fromRGB(255, 85, 85),
-    Increment = 1,
-    ValueName = "Studs",
-    Callback = function(Value)
-        _G.AuraRange = Value
-    end    
-})
+-- TAB COMBAT
+local Tab1 = Window:NewTab("Combat")
+local Sec1 = Tab1:NewSection("Kill Aura")
+Sec1:NewToggle("Bật Kill Aura", "Tự đánh quái", function(v) _G.KillAura = v end)
+Sec1:NewSlider("Tầm đánh", "Phạm vi quét quái", 100, 5, function(v) _G.AuraRange = v end)
 
 task.spawn(function()
     while true do
-        if _G.KillAura then
+        if _G.KillAura and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local equippedTool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                    if equippedTool then
-                        local target = getClosestEnemy()
-                        if target and target:FindFirstChild("HumanoidRootPart") then
-                            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
-                            if dist <= _G.AuraRange then
-                                equippedTool:Activate()
-                            end
-                        end
+                local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                if tool then
+                    local target = getClosestEnemy()
+                    if target and target:FindFirstChild("HumanoidRootPart") then
+                        if (LocalPlayer.Character.HumanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude <= _G.AuraRange then tool:Activate() end
                     end
                 end
             end)
@@ -121,93 +75,105 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- TAB 2: DYNAMIC EXPLOIT (Quét & Chọn Vũ Khí)
--- ==========================================
-local ExploitTab = Window:MakeTab({
-    Name = "Weapon Exploits",
-    Icon = "rbxassetid://4483362458"
-})
+-- TAB EXPLOIT
+local Tab2 = Window:NewTab("Exploit")
+local Sec2 = Tab2:NewSection("No Cooldown")
+local WeaponDropdown = Sec2:NewDropdown("Chọn vật phẩm", "Vũ khí cần bẻ CD", ScannedWeaponsList, function(v) _G.SelectedTargetWeapon = v end)
+Sec2:NewButton("🔄 Quét túi đồ", "Cập nhật danh sách", function()
+    updateInventoryList()
+    WeaponDropdown:Refresh(ScannedWeaponsList)
+end)
+Sec2:NewToggle("Bỏ Cooldown (No CD)", "Xóa thời gian chờ", function(v) _G.NoCooldown = v end)
 
--- Khởi tạo danh sách thả xuống trước (Ban đầu chỉ có chữ "Tất cả vật phẩm")
-local WeaponDropdown = ExploitTab:AddDropdown({
-    Name = "Select Weapon (Chọn súng/vật phẩm)",
-    Default = "Tất cả vật phẩm",
-    Options = ScannedWeaponsList,
-    Callback = function(Value)
-        _G.SelectedTargetWeapon = Value
-        print("Qcat Hub: Đã chọn mục tiêu bẻ khóa Cooldown -> " .. Value)
-    end
-})
-
--- Nút bấm thực hiện hành động quét đồ thời gian thực
-ExploitTab:AddButton({
-    Name = "🔄 Scan Inventory (Cập nhật túi đồ)",
-    Callback = function()
-        updateInventoryList() -- Chạy hàm quét
-        -- Ép Orion UI cập nhật lại danh sách lựa chọn mới vừa quét được lên màn hình
-        WeaponDropdown:Refresh(ScannedWeaponsList, true)
-        
-        OrionLib:MakeNotification({
-            Name = "Qcat Dynamic Scanner",
-            Content = "Đã quét xong! Hãy mở Dropdown để chọn vật phẩm thực tế.",
-            Image = "rbxassetid://4483345998",
-            Time = 3
-        })
-    end
-})
-
--- Bật/Tắt chế độ bẻ khóa Cooldown
-ExploitTab:AddToggle({
-    Name = "Enable No Cooldown Mode",
-    Default = false,
-    Callback = function(Value)
-        _G.NoCooldownActive = Value
-    end    
-})
-
--- [LUỒNG XỬ LÝ ÉP BỎ COOLDOWN THEO LỰA CHỌN]
 task.spawn(function()
     while true do
-        if _G.NoCooldownActive then
+        if _G.NoCooldown then
             pcall(function()
-                -- Tạo một danh sách gom các món đồ cần bẻ khóa trong luồng này
-                local itemsToBypass = {}
-
-                -- Thu thập toàn bộ Tool hiện có
                 local allTools = {}
-                if LocalPlayer.Character then
-                    for _, v in ipairs(LocalPlayer.Character:GetChildren()) do if v:IsA("Tool") then table.insert(allTools, v) end end
-                end
+                if LocalPlayer.Character then for _, v in ipairs(LocalPlayer.Character:GetChildren()) do if v:IsA("Tool") then table.insert(allTools, v) end end end
                 for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do if v:IsA("Tool") then table.insert(allTools, v) end end
-
-                -- Lọc vật phẩm dựa trên cài đặt UI người dùng chọn
                 for _, tool in ipairs(allTools) do
-                    if _G.SelectedTargetWeapon == "Tất cả vật phẩm" then
-                        table.insert(itemsToBypass, tool)
-                    elseif tool.Name == _G.SelectedTargetWeapon then
-                        table.insert(itemsToBypass, tool)
+                    if _G.SelectedTargetWeapon == "Tất cả" or tool.Name == _G.SelectedTargetWeapon then
+                        if tool.Parent == LocalPlayer.Backpack and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid:EquipTool(tool) end
+                        tool:Activate()
+                        for _, child in ipairs(tool:GetDescendants()) do
+                            if child:IsA("NumberValue") or child:IsA("IntValue") then
+                                if child.Name:lower():match("cooldown") or child.Name:lower():match("delay") or child.Name:lower():match("time") then child.Value = 0 end
+                            elseif child:IsA("BoolValue") then
+                                if child.Name:lower():match("reload") or child.Name:lower():match("shoot") or child.Name:match("active") then child.Value = false end
+                            end
+                        end
                     end
-                end
-
-                -- Thực hiện bẻ khóa Cooldown và ép bắn siêu tốc cho các mục tiêu đã lọc
-                for _, tool in ipairs(itemsToBypass) do
-                    -- Nếu món đồ đang cất trong balo, tự động lôi ra tay để kích hoạt
-                    if tool.Parent == LocalPlayer.Backpack and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                        LocalPlayer.Character.Humanoid:EquipTool(tool)
-                    end
-
-                    -- Ép hành động bắn/sử dụng liên tục
-                    tool:Activate()
-
-                    -- Bẻ gãy các biến Cooldown/Reloading ẩn bên trong Tool (nếu có)
-                    if tool:FindFirstChild("Cooldown") then tool.Cooldown.Value = 0 end
-                    if tool:FindFirstChild("Reloading") then tool.Reloading.Value = false end
                 end
             end)
         end
-        task.wait(0.01) -- Độ trễ 10ms biến mọi khẩu súng đơn thanh được chọn thành súng sấy liên thanh
+        task.wait(0.01)
     end
 end)
 
-OrionLib:Init()
+-- TAB MOVEMENT
+local Tab3 = Window:NewTab("Movement")
+local Sec3 = Tab3:NewSection("Di chuyển")
+Sec3:NewSlider("Tốc độ chạy", "WalkSpeed", 300, 16, function(v) _G.WalkSpeed = v end)
+Sec3:NewSlider("Lực nhảy cao", "JumpPower", 400, 50, function(v) _G.JumpPower = v end)
+
+RunService.Heartbeat:Connect(function()
+    pcall(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = _G.WalkSpeed
+            LocalPlayer.Character.Humanoid.JumpPower = _G.JumpPower
+        end
+    end)
+end)
+
+Sec3:NewToggle("Bật chế độ Bay", "Fly Mode", function(v)
+    _G.Flying = v
+    local char = LocalPlayer.Character
+    if not v and char and char:FindFirstChild("HumanoidRootPart") then
+        if char.HumanoidRootPart:FindFirstChild("QcatFlyBV") then char.HumanoidRootPart.QcatFlyBV:Destroy() end
+        if char.HumanoidRootPart:FindFirstChild("QcatFlyBG") then char.HumanoidRootPart.QcatFlyBG:Destroy() end
+    end
+end)
+Sec3:NewSlider("Tốc độ bay", "Fly Speed", 300, 10, function(v) _G.FlySpeed = v end)
+
+task.spawn(function()
+    while true do
+        if _G.Flying and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            pcall(function()
+                local hrp = LocalPlayer.Character.HumanoidRootPart
+                local bv = hrp:FindFirstChild("QcatFlyBV") or Instance.new("BodyVelocity", hrp)
+                bv.Name = "QcatFlyBV" bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+                local bg = hrp:FindFirstChild("QcatFlyBG") or Instance.new("BodyGyro", hrp)
+                bg.Name = "QcatFlyBG" bg.maxForce = Vector3.new(9e9, 9e9, 9e9) bg.cframe = workspace.CurrentCamera.CFrame
+                local moveDir = LocalPlayer.Character.Humanoid.MoveDirection
+                if moveDir.Magnitude > 0 then bv.velocity = moveDir * _G.FlySpeed else bv.velocity = Vector3.new(0, 0.1, 0) end
+            end)
+        end
+        task.wait()
+    end
+end)
+
+-- TAB UTILS
+local Tab4 = Window:NewTab("Utils")
+local Sec4 = Tab4:NewSection("Tiện ích")
+Sec4:NewToggle("Bật Bất tử (God)", "God Mode Alpha", function(v) _G.GodMode = v end)
+
+task.spawn(function()
+    while true do
+        if _G.GodMode and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            pcall(function()
+                LocalPlayer.Character.Humanoid.Health = LocalPlayer.Character.Humanoid.MaxHealth
+                LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+            end)
+        end
+        task.wait(0.1)
+    end
+end)
+
+Sec4:NewToggle("Giảm Lag (FPS)", "Smooth Graphics", function(v)
+    _G.AntiLag = v
+    if v then
+        settings().Rendering.QualityLevel = 1
+        for _, obj in ipairs(workspace:GetDescendants()) do if obj:IsA("BasePart") then obj.Material = Enum.Material.SmoothPlastic obj.CastShadow = false end end
+    end
+end)
